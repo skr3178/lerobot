@@ -1,7 +1,20 @@
-```/home/skr3178/miniconda3/envs/lerobot/bin/python /home/skr3178/lerobot/print_env.py```
+# LeRobot with SVLA SO101 Pick-and-Place Dataset
 
-Available Environments:
-['aloha', 'pusht', 'xarm']
+This repository contains the LeRobot framework along with the SVLA SO101 pick-and-place dataset for robot learning.
+
+## Quick Start
+
+### 1. Download the Dataset
+
+Download the `svla_so101_pickplace` dataset from Hugging Face:
+
+```bash
+# Make the download script executable
+chmod +x download_svla_dataset.sh
+
+# Run the download script
+./download_svla_dataset.sh
+```
 
 Available Tasks per Environment:
 {'aloha': ['AlohaInsertion-v0', 'AlohaTransferCube-v0'], 'pusht': ['PushT-v0'], 'xarm': ['XarmLift-v0']}
@@ -33,7 +46,8 @@ Available Motors:
 ## Train a policy:
 
   
-  ```python -m lerobot.scripts.train \
+  ```
+  python -m lerobot.scripts.train \
   --dataset.repo_id=lerobot/svla_so101_pickplace \
   --policy.type=act \
   --output_dir=outputs/train/act_svla_so101 \
@@ -42,10 +56,64 @@ Available Motors:
   --wandb.enable=false \
   --policy.push_to_hub=false \
   --batch_size=4 \
-  --num_workers=2 
-  ```
+  --num_workers=2
+```
 
-  There are 2 parquet files: 
+## Dataset Information
+
+### Dataset Structure
+
+The `svla_so101_pickplace` dataset contains:
+
+- **50 episodes** of pick-and-place demonstrations
+- **11,939 total frames** across all episodes
+- **30 FPS** recording rate (~6.6 seconds per episode)
+- **2 camera views**: upward and side cameras (480x640x3)
+- **6-DOF robot arm** with gripper control
+
+### Data Sources
+
+The dataset contains two types of data:
+
+1. **Robot State Data** (from motor encoders):
+   - `shoulder_pan.pos` - shoulder pan joint position
+   - `shoulder_lift.pos` - shoulder lift joint position  
+   - `elbow_flex.pos` - elbow flexion joint position
+   - `wrist_flex.pos` - wrist flexion joint position
+   - `wrist_roll.pos` - wrist roll joint position
+   - `gripper.pos` - gripper position
+
+2. **Video Data** (from cameras):
+   - `observation.images.up` - upward camera view
+   - `observation.images.side` - side camera view
+
+### Parquet Files
+
+The dataset contains two main parquet files:
+
+1. **Episodes Metadata** (shape: 50, 62):
+   - Contains metadata for each episode
+   - Episode index, length, task information
+   - Start/end timestamps
+   - Statistical summaries
+
+2. **Action Data** (shape: 11,939, N):
+   - Contains actual time-series data for all frames
+   - Robot states, actions, timestamps
+   - Video frame references
+
+## Available Environments
+
+- **aloha**: AlohaInsertion-v0, AlohaTransferCube-v0
+- **pusht**: PushT-v0  
+- **xarm**: XarmLift-v0
+
+## Available Policies
+
+- **act**: Action Chunking Transformer
+- **diffusion**: Diffusion-based policies
+- **tdmpc**: TD-MPC
+- **vqbet**: VQ-BeT
 
 1. Episodes parquet file
 
