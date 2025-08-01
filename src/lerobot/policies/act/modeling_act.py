@@ -195,7 +195,7 @@ class ACTTemporalEnsembler:
         Here we use an online method for computing the average rather than caching a history of actions in
         order to compute the average offline. For a simple 1D sequence it looks something like:
 
-        ```
+     ```
         import torch
 
         seq = torch.linspace(8, 8.5, 100)
@@ -354,17 +354,16 @@ class ACT(nn.Module):
         # [latent, (robot_state), (env_state), (image_feature_map_pixels)].
         if self.config.robot_state_feature:
             self.encoder_robot_state_input_proj = nn.Linear(
-                self.config.robot_state_feature.shape[0], config.dim_model
-            )
+                self.config.robot_state_feature.shape[0], config.dim_model)
+                
         if self.config.env_state_feature:
             self.encoder_env_state_input_proj = nn.Linear(
-                self.config.env_state_feature.shape[0], config.dim_model
-            )
+                self.config.env_state_feature.shape[0], config.dim_model)
         self.encoder_latent_input_proj = nn.Linear(config.latent_dim, config.dim_model)
+        
         if self.config.image_features:
             self.encoder_img_feat_input_proj = nn.Conv2d(
-                backbone_model.fc.in_features, config.dim_model, kernel_size=1
-            )
+                backbone_model.fc.in_features, config.dim_model, kernel_size=1)
         # Transformer encoder positional embeddings.
         n_1d_tokens = 1  # for the latent
         if self.config.robot_state_feature:

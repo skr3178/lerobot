@@ -58,7 +58,6 @@ Available Motors:
   --batch_size=4 \
   --num_workers=2
 ```
-
 ## Dataset Information
 
 ### Dataset Structure
@@ -143,3 +142,110 @@ commanded actions
 
 Dataset folder:
 https://huggingface.co/datasets/lerobot/svla_so101_pickplace/tree/main/data/chunk-000
+
+
+## Why is leader used for controlling the torque or force application?
+
+The teleoperation system consists of:
+
+Leader robot: Directly manipulated by a human operator.
+Follower robot: Mimics the leader’s movements but is physically interacting with the environment.
+
+The low-level PID controller (Proportional-Integral-Derivative) on the follower robot continuously tries to reduce the error between the leader’s target joint positions and the follower’s current joint positions.
+
+The PID controller calculates a control effort (torque or force) based on the difference bet. q_leader - q_follower
+
+A non-zero difference (error) indicates that the operator is pushing against resistance (e.g., when contacting an object).
+
+The difference signal (leader vs. follower) encodes: Contact forces: Resistance from objects. Human adaptation: The operator pushing harder or easing off.
+
+Similar to transformers, use of embeddings- positional and spatial. Positional embeddings are there to give a transformer knowledge about the position of the input vectors. 
+
+![image.png](image.png)
+
+Explaination of Pseudocode:
+
+![ACT_pseudocode.png](ACT_pseudocode.png)
+
+# KL divergence chosen reason: 
+
+$ L_{reg} = D_{KL}(q_\phi(\tilde{z} | a_{t:t+k}, \tilde{o}_t) || \mathcal{N}(0, I)) $ 
+
+The standard normal distribution $\mathcal{N}(0, I)$ (zero mean, identity covariance) is chosen as the prior because it is a natural distribution that imposes no bias toward any specific direction in the latent space.
+In VAEs, the goal is to learn a latent representation $\tilde{z}$ that is both informative (capturing the input data's structure) and generalizable.
+
+![ACT_inference.png](ACT_inference.jpeg)
+
+
+## Inference ACT policy
+![Architecture_VAE2.jpeg](Architecture_VAE2.jpeg)
+
+weight m is given calculated as: exp(-temporal_ensemble_coeff * i) where w₀ is the oldest action.
+
+They are then normalized to sum to 1 by dividing by Σwᵢ. 
+
+Here's some intuition around how the coefficient works:
+            
+- Setting it to 0 uniformly weighs all actions.
+- Setting it positive gives more weight to older actions.
+- Setting it negative gives more weight to newer actions.
+        
+NOTE: The default value for `temporal_ensemble_coeff` used by the original ACT work is 0.01.
+
+Multimodality in ACT policy: 
+- Robot State - Joint positions, velocities, end-effector pose
+- Environment State - Object positions, task-specific features
+- Visual Observations - Camera images from multiple viewpoints
+- Action Sequences - Target joint trajectories (for VAE training)
+
+For image analysis and classification, a RESNET layer is used:
+Typical layers in RESNET and feature map:
+conv1 → bn1 → relu → maxpool → layer1 → layer2 → layer3 → layer4 → avgpool → fc
+
+At layer 4, the RESNET model is intercepted (minus the classifier). This is done using the Intermediate layer getter.
+
+```
+self.backbone = IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
+```
+
+# len (RESNET).output classifier = 1000
+
+The input embeddings are 
+- CLS token given as 
+```            
+self.vae_encoder_cls_embed = nn.Embedding(1, config.dim_model)
+```
+Acts as a "summary token" that will encode the latent distribution parameters. This embedding is learnt during training
+
+- Robot state embeddings :  Maps robot state (joint positions, velocities, etc.) to transformer dimension
+
+If robot has 7 joints → Linear(7, 512)
+
+```
+            # Projection layer for joint-space configuration to hidden dimension.
+            if self.config.robot_state_feature:
+                self.vae_encoder_robot_state_input_proj = nn.Linear(
+                    self.config.robot_state_feature.shape[0], config.dim_model
+                )
+```
+
+- Action sequence []
+
+Purpose: Maps each action in the sequence to transformer dimension
+Example: If action is 7-dimensional → Linear(7, 512)
+
+```
+            action_embed = self.vae_encoder_action_input_proj(batch["action"])  # (B, S, D)
+```
+
+- combining embeddings
+```
+            if self.config.robot_state_feature:
+                vae_encoder_input = [cls_embed, robot_state_embed, action_embed]  # (B, S+2, D)
+            else:
+                vae_encoder_input = [cls_embed, action_embed]
+            vae_encoder_input = torch.cat(vae_encoder_input, axis=1)
+```
+1. Create list: [cls_embed, robot_state_embed, action_embed]
+2. Concatenate along sequence dimension: torch.cat(..., axis=1)
+
