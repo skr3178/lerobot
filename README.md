@@ -199,6 +199,16 @@ Multimodality in ACT policy:
 - Action Sequences - Target joint trajectories (for VAE training)
 
 For image analysis and classification, a RESNET layer is used:
+RESNET overall architecture:
+Conv1: 1 layer
+BatchNorm1: 1 layer
+Layer1: 2 BasicBlocks → each with 2 conv layers = 4 layers
+Layer2: 2 BasicBlocks → 4 layers
+Layer3: 2 BasicBlocks → 4 layers
+Layer4: 2 BasicBlocks → 4 layers
+Fully Connected (fc): 1 layer
+
+
 Typical layers in RESNET and feature map:
 conv1 → bn1 → relu → maxpool → layer1 → layer2 → layer3 → layer4 → avgpool → fc
 
@@ -249,3 +259,65 @@ Example: If action is 7-dimensional → Linear(7, 512)
 1. Create list: [cls_embed, robot_state_embed, action_embed]
 2. Concatenate along sequence dimension: torch.cat(..., axis=1)
 
+# Image processing across different cameras
+Refer to file modeling_act.py 
+
+
+ The images or camera information is in video format. This is broken down into frames/images. These images go through an encoder which transforms these image from shape (batch, C, H, W) to format which fits the transformer input embeddign format. Alongside this information what is passed is the information on the positional embeddings generated from the sin cos.
+
+
+```
+# From modeling_act.py lines 337-345
+backbone_model = getattr(torchvision.models, config.vision_backbone)(
+    replace_stride_with_dilation=[False, False, config.replace_final_stride_with_dilation],
+    weights=config.pretrained_backbone_weights,  # ResNet18_Weights.IMAGENET1K_V1
+    norm_layer=FrozenBatchNorm2d,
+)
+self.backbone = IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
+```
+Transformation: (batch, C, H, W) → (batch, feature_dim, H', W')
+ResNet processes the image and extracts features from layer4
+Output is a feature map with spatial dimensions (H', W')
+
+# Feature Projection
+
+```
+# From modeling_act.py line 362
+self.encoder_img_feat_input_proj = nn.Conv2d(
+    backbone_model.fc.in_features, config.dim_model, kernel_size=1)
+```
+
+Transformation: (batch, feature_dim, H', W') → (batch, dim_model, H', W')
+1x1 convolution projects features to transformer embedding dimension
+Reshape for Transformer:
+
+
+
+
+### Dimensionality Flow in Video-to-Transformer Pipeline
+
+- **`dim_model = 512`** (from ACT config)
+
+1. **Input Video**  
+   → Frames `(B, 3, 224, 224)`  
+   *(Batch × RGB × Height × Width)*
+
+2. **ResNet Encoder**  
+   → Feature Map `(B, 512, 7, 7)`  
+   - **Feature Dim**: 512 (ResNet18 `layer4` output)  
+   - **Spatial Reduction**: `H' = H/32`, `W' = W/32` *(32x downscaling)*
+
+3. **1×1 Convolution**  
+   → Projected Features `(B, 512, 7, 7)` *(Maintains dimensions)*
+
+4. **Rearrange**  
+   → Image Tokens `(49, B, 512)`  
+   - Flattened spatial dim: `7×7 = 49 tokens`  
+   *(Sequence × Batch × Embedding)*
+
+5. **2D Sin/Cos Positional Embeddings**  
+   → `(49, B, 512)` *(Added to tokens)*
+
+6. **Transformer Input**  
+   → **49 tokens**, each with **512 dimensions**  
+   *(Ready for encoder processing)*
