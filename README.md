@@ -4,7 +4,7 @@ This repository contains the LeRobot framework along with the SVLA SO101 pick-an
 
 ## Quick Start
 
-### 1. Download the Dataset
+###  Download the Dataset
 
 Download the `svla_so101_pickplace` dataset from Hugging Face:
 
@@ -163,6 +163,9 @@ Similar to transformers, use of embeddings- positional and spatial. Positional e
 
 ![image.png](image.png)
 
+![arch2_VAE.jpg](arch2_VAE.jpg)
+
+
 Explaination of Pseudocode:
 
 ![ACT_pseudocode.png](ACT_pseudocode.png)
@@ -190,7 +193,26 @@ Here's some intuition around how the coefficient works:
 - Setting it positive gives more weight to older actions.
 - Setting it negative gives more weight to newer actions.
         
+
+### Temporal ensemble coefficients: 
+
+Paramter that define the weightage to be provided for each coefficient
+- older actions <==> newer actions
+
+Temporal ensembling is a technique that smooths actions over time by combining predictions from multiple time steps using exponential weighting. Instead of using just the current prediction, it creates a weighted average of recent predictions.
+
+Possibilities: 
+- Positive (default: 0.01) give weight to older actions
+- Negative: Weightage to newer actions
+- Zero: equal weightage
+
 NOTE: The default value for `temporal_ensemble_coeff` used by the original ACT work is 0.01.
+
+With temporal_ensemble_coeff = 0.01:
+- Oldest action gets weight ~1.0 (highest weight)
+- Second oldest gets weight ~0.99
+- Third oldest gets weight ~0.98
+And so on...
 
 Multimodality in ACT policy: 
 - Robot State - Joint positions, velocities, end-effector pose
@@ -218,7 +240,7 @@ At layer 4, the RESNET model is intercepted (minus the classifier). This is done
 self.backbone = IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
 ```
 
-# len (RESNET).output classifier = 1000
+#### len (RESNET).output classifier = 1000
 
 The input embeddings are 
 - CLS token given as 
@@ -321,3 +343,75 @@ Reshape for Transformer:
 6. **Transformer Input**  
    → **49 tokens**, each with **512 dimensions**  
    *(Ready for encoder processing)*
+
+The architecture follows the standard encoder-decoder pattern where the encoder processes observations and the decoder generates actions, with the VAE providing an additional latent bottleneck during training.
+
+When self.config.use_vae is set as 'True', the VAE is used. This spits out the latent variable 'z' used subsequently for training.
+
+# Input / output structure.
+
+(K+2) embeddings
+K refers to the action sequence length or chunk size which is set as 100. 
+chunk_size: int = 100  # Default value
+This means 100 action steps are predicted.
++1 for Robot state
++1 for CLS  token for latent parameters
+
+
+[CLS] token: Typically used in BERT format for creating a summary of the sequence. Here it is used for summarizing the sequence of actions. 
+
+
+1. Extract the data, add action sequence 
+![Step_1.png](Step_1.png)
+
+Input normalization: Raw observations → normalized for model input
+Target normalization: Raw actions → normalized for training targets
+Output unnormalization: Model outputs → denormalized for environment execution
+
+2. How to infer z?
+![Step_2.png](Step_2.png)
+
+3. Predict a sequence?
+![Step_3.png](Step_3.png)
+
+4. Testing: snap of the VAE
+![Training.png](Training.png)
+
+VAE encoder output:
+mean(mu) and log(variance^2)
+
+
+ACT vs VLM (vision language models)
+
+![VLM.jpg](VLM.jpg)
+
+
+### VLM
+
+Input: [Image] + [Text Prompt]
+    ↓
+Vision Encoder (ViT, ResNet, etc.)
+    ↓
+Text Encoder (Transformer, BERT, etc.)
+    ↓
+Cross-Modal Fusion (Cross-Attention)
+    ↓
+Text Decoder (GPT-style)
+    ↓
+Output: Text Response
+
+
+### ACT
+Input: [Image] + [Text Prompt]
+    ↓
+Vision Encoder (ViT, ResNet, etc.)
+    ↓
+Text Encoder (Transformer, BERT, etc.)
+    ↓
+Cross-Modal Fusion (Cross-Attention)
+    ↓
+Text Decoder (GPT-style)
+    ↓
+Output: Text Response
+
+

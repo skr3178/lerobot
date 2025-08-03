@@ -69,7 +69,7 @@ class ACTPolicy(PreTrainedPolicy):
             config.output_features, config.normalization_mapping, dataset_stats
         )
         self.unnormalize_outputs = Unnormalize(
-            config.output_features, config.normalization_mapping, dataset_stats
+            config.output_features, config.normalization_mapping, dataset_stats # based on data type, decide the type of normalization : mean_std, min_max, identity typical
         )
 
         self.model = ACT(config)
@@ -140,9 +140,9 @@ class ACTPolicy(PreTrainedPolicy):
         batch = self.normalize_inputs(batch)
         if self.config.image_features:
             batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
-            batch[OBS_IMAGES] = [batch[key] for key in self.config.image_features]
+            batch[OBS_IMAGES] = [batch[key] for key in self.config.image_features] #   reorganizes them into a list format expected by the model
 
-        actions = self.model(batch)[0]
+        actions = self.model(batch)[0] #Runs the ACT transformer model to predict actions
         actions = self.unnormalize_outputs({ACTION: actions})[ACTION]
         return actions
 
@@ -309,7 +309,7 @@ class ACT(nn.Module):
         super().__init__()
         self.config = config
 
-        if self.config.use_vae:
+        if self.config.use_vae: # use_vae = True
             self.vae_encoder = ACTEncoder(config, is_vae_encoder=True)
             self.vae_encoder_cls_embed = nn.Embedding(1, config.dim_model)
             # Projection layer for joint-space configuration to hidden dimension.
